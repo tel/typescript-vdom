@@ -4,31 +4,16 @@
  * two kinds of opaque callback mechanisms (Hooks and Widgets) along with
  * a transparent caching mechanism (Thunks).
  * 
- * The current class-based design is a little overly brittle but is needed
+ * (The current class-based design is a little overly brittle but is needed
  * so as to enable principled coercion from the VTree union to the individual
  * types via type guards and instanceof. A enum/tag based approach more 
  * remniscent of the system in place in the original Virtual DOM implementation
- * might work better in the long run.
+ * might work better in the long run.)
  */
 
+import { iterSlots, iterArray } from 'utilities';
+
 export type VTree = VNode | VText | Widget | Thunk;
-
-/** Iterate a function of the name and value over all slots in an object. */
-function iterSlots<V>(obj: { [key: string]: V }, fn: (string, V) => any): void {
-  var key: string;
-  for (key in obj) {
-    if (obj.hasOwnProperty(key)) {
-      var value: V = obj[key];
-      fn(key, value);
-    }
-  }
-} 
-
-/** Iterate a function over all values in an array. */
-function iterArray<A>(n: number, ary: Array<A>, fn: (A) => any): void {
-  var i: number;
-  for (i = 0; i < n; i++) { fn(ary[i]); };
-}
 
 var noProperties: Props = {};
 var noChildren: Array<VTree> = [];
@@ -38,14 +23,12 @@ export class VNode {
   constructor(tagName: string, properties: Props);
   constructor(tagName: string, properties: Props, children: Array<VTree>);
   constructor(tagName: string, properties: Props, children: Array<VTree>, key: string);
-  constructor(tagName: string, properties: Props, children: Array<VTree>, key: string, namespace: string);
   constructor
     ( public tagName: string
     , public properties: Props = noProperties
     , public children: Array<VTree> = noChildren
     /** A unique key used to identify this VNode during diffing. */
-    , public key?: string
-    , public namespace?: string
+    , public key?: string    
     ) {      
       this.count           = this.children.length;
       this.descendants     = 0;
@@ -112,12 +95,27 @@ export class VText {
 function noop1(x: any): any {}
 function noop2(x: any, y: any): any {}
 
+/**
+ * Widgets form "holes" in the VTree where the diffing algorithm cannot go. One
+ * widget will try to "update" a prior one when they share ids or init functions.
+ */
 export class Widget {
   constructor
-    ( public init: () => Element
-    , public update: (previousWidget: Widget, previousDomNode: Element) => any = noop2
-    , public destroy: (domNode: Element) => any = noop1
+    ( public init: () => Node
+    , public update: (previousWidget: Widget, previousDomNode: Node) => any = noop2
+    , public destroy: (domNode: Node) => any = noop1
     ) {}
+}
+
+export module Widget {
+  // TODO: Figure this one out
+  export function shouldUpdate(a: Widget, b: Widget) {
+    if ("name" in a && "name" in b) {
+      return a.id === b.id
+    } else {
+      return a.init === b.init
+    }  
+  }
 }
 
 export type ForcedVTree = VNode | VText | Widget;
@@ -245,20 +243,28 @@ export class GenericThunk<S> extends Thunk {
 
 export class VHook {
   constructor
-    ( hook: (node: Element, propertyName: string, previousValue: any) => any );
+    ( hook: (node: Node, propertyName: string, previousValue: any) => any );
   constructor
-    ( hook: (node: Element, propertyName: string, previousValue: any) => any
-    , unhook: (node: Element, propertyName: string, nextValue: any) => any 
+    ( hook: (node: Node, propertyName: string, previousValue: any) => any
+    , unhook: (node: Node, propertyName: string, nextValue: any) => any 
     );
   constructor
-    ( public hook:    (node: Element, propertyName: string, previousValue: any) => any
-    , public unhook?: (node: Element, propertyName: string, nextValue: any) => any 
+    ( public hook:    (node: Node, propertyName: string, previousValue: any) => any
+    , public unhook?: (node: Node, propertyName: string, nextValue: any) => any 
     ) {
       this.mustUnhook = !(unhook === undefined);
     }
   mustUnhook: boolean;
 }
 
+export interface Dict<V> {
+  [key: string]: V
+}
+
+export type PropValue = string | number | VHook | Dict<string>
+
 export interface Props {
-  [key: string]: any | VHook
+  attributes: Dict<string>;
+  style: Dict<string>;
+  [key: string]: PropValue;
 }
