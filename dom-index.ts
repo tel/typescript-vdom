@@ -6,6 +6,8 @@
  * We only recurse into a DOM node if we know that it contains a child of
  * interest.
  */ 
+ 
+ // TODO: Work through this module.
 
 import { VNode } from 'vtree'
 
@@ -67,33 +69,36 @@ function recurse
     return nodes
 }
 
-// Binary search for an index in the interval [left, right]
-function indexInRange(indices, left, right) {
-    if (indices.length === 0) {
-        return false
+/** 
+ * Verifies that *some* index in sorted list indices is in the range (left, right).
+ */
+function indexInRange(indices: Array<number>, left: number, right: number): boolean {
+  var minIndex = 0;
+  var maxIndex = indices.length - 1;
+  var currentIndex: number;
+  var currentItem: number;
+
+  while (minIndex <= maxIndex) {
+    // The Math.floor operation here was originally implemented as a right shift
+    // e.g, (\x -> x >> 0). While this might be faster [0] it is CERTAINLY harder
+    // to read and understand.
+    //
+    // [0]: http://arnorhs.com/2012/05/30/comparing-the-performance-of-math-floor-parseint-and-a-bitwise-shift/
+    currentIndex = Math.floor((maxIndex + minIndex) / 2);
+    currentItem = indices[currentIndex];
+
+    if (minIndex === maxIndex) {
+      return currentItem >= left && currentItem <= right;
+    } else if (currentItem < left) {
+      minIndex = currentIndex + 1;
+    } else if (currentItem > right) {
+      maxIndex = currentIndex - 1;
+    } else {
+      return true;
     }
+  }
 
-    var minIndex = 0
-    var maxIndex = indices.length - 1
-    var currentIndex
-    var currentItem
-
-    while (minIndex <= maxIndex) {
-        currentIndex = ((maxIndex + minIndex) / 2) >> 0
-        currentItem = indices[currentIndex]
-
-        if (minIndex === maxIndex) {
-            return currentItem >= left && currentItem <= right
-        } else if (currentItem < left) {
-            minIndex = currentIndex + 1
-        } else  if (currentItem > right) {
-            maxIndex = currentIndex - 1
-        } else {
-            return true
-        }
-    }
-
-    return false;
+  return false;
 }
 
 function ascendingOrder(a: number, b: number): number {
