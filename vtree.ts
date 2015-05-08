@@ -120,7 +120,7 @@ export class Widget {
     ) {}
 }
 
-export type ThunkResult = VNode | VText | Widget;
+export type ForcedVTree = VNode | VText | Widget;
 
 /** 
  * A Thunk is a deferred VTree. Upon diffing a Thunk has an opportunity
@@ -135,12 +135,62 @@ export type ThunkResult = VNode | VText | Widget;
  * render optimization.
  */
 export class Thunk {
-  constructor(public render: (prior: VTree) => ThunkResult) {
+  /** 
+   * The render function should construct the thunked VTree eliminating all remaining
+   * laziness (e.g., it cannot return another Thunk). The rendering is done with access
+   * to the prior VTree node that is being replaced which may also be null.
+   */
+  constructor(render: (prior: VTree) => ForcedVTree) {
+    this.coreRender = render;
     this.hasRendered = false;
     this.cache = null;
   };
+  
+  private coreRender: (prior: VTree) => ForcedVTree;
+  
+  /** 
+   * Attempts to render this thunk against the VTree it will be replacing.
+   * This function is called at most once and then its result it cached.
+   */
+  render(prior: VTree): ForcedVTree {
+    if (this.hasRendered) {
+      return this.cache;
+    } else {
+      this.cache = this.coreRender(prior);
+      this.hasRendered = true;
+      return this.cache;
+    }
+  }
+  
   hasRendered: boolean;
-  cache: ThunkResult;
+  cache: ForcedVTree;
+}
+
+/**
+ * Given two VTrees, a and b, with b set to replace a, force a and b as efficiently
+ * as possible.
+ */
+export function handleThunk(a: VTree, b: VTree): {a: ForcedVTree, b: ForcedVTree} {
+  var renderedA: ForcedVTree;
+  var renderedB: ForcedVTree;
+
+  if ( b instanceof Thunk &&
+       a instanceof Thunk ) {
+    renderedB = b.render(a);
+    renderedA = a.render(null);
+  } else if ( b instanceof Thunk ) {
+    renderedA = <ForcedVTree> a;
+    renderedB = b.render(a);
+  } else if ( a instanceof Thunk ) {
+    renderedB = <ForcedVTree> b;
+    renderedA = a.render(null);
+  } else {
+    renderedA = <ForcedVTree> a;
+    renderedB = <ForcedVTree> b;
+  }
+  
+  return { a: renderedA, b: renderedB };
+  
 }
 
 // NOTE: Subclassing like below is a pretty ugly way to achieve this. It might
