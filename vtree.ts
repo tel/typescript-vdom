@@ -9,6 +9,11 @@
  * types via type guards and instanceof. A enum/tag based approach more 
  * remniscent of the system in place in the original Virtual DOM implementation
  * might work better in the long run.)
+ * 
+ * (Another option is to go all in and emulate Scala case classes by creating a
+ * common superclass for all members of VTree. It might be at this point 
+ * congruent to name this VNode and to call what's currently VNode, VEl. That said
+ * it'll probably cause some trouble.)
  */
 
 import { iterSlots, iterArray } from 'utilities';
