@@ -2,13 +2,13 @@
  * VPatch: the core type indicating changes between two VTrees. 
  */
  
-import { VTree, VText, Widget, VNode, VHook, Dict, Props, PropValue } from 'vtree';
+import { VTree, VText, Widget, VNode, VHook, Props, PropValue } from 'vtree';
 import { createNode, CreateOptions } from 'create-node';
-import { iterSlots, iterArray, iterSparseArray } from 'utilities';
+import { iterSlots, iterArray, iterSparseArray, Dict } from 'utilities';
 
 export interface VPatchSet {
   patches: { [index: number]: Array<VPatch> };
-  node0: VNode;
+  node0: VTree;
 }
 
 export interface PatchOptions {
@@ -30,7 +30,7 @@ export interface NodeMap {
 }
 
 export class VPatch {
-  vTree: VTree;
+  constructor( public vTree: VTree ) {};
   apply(node: Node, config: PatchConfig): Node { return node; }
 }
 
@@ -53,8 +53,8 @@ export module VPatch {
     }
   }
   
-  export class STRING extends VPatch {
-    constructor( public vText : VText ) { super(); }
+  export class VTEXT extends VPatch {
+    constructor( vTree: VTree, public vText : VText ) { super(vTree); }
     apply(node: Node, config: PatchConfig): Node {
       var newNode: Node;
   
@@ -76,7 +76,7 @@ export module VPatch {
   }
   
   export class WIDGET extends VPatch {
-    constructor( public widget : Widget ) { super(); }
+    constructor( vTree: VTree, public widget : Widget ) { super(vTree); }
     apply(node: Node, config: PatchConfig): Node {
       var priorVTree = this.vTree;
       var newNode: Node;
@@ -116,7 +116,7 @@ export module VPatch {
   }
   
   export class VNODE extends VPatch {
-    constructor( public vNode : VNode ) { super(); }
+    constructor( vTree: VTree, public vNode : VNode ) { super(vTree); }
     apply(node: Node, config: PatchConfig): Node {
       var parentNode = node.parentNode;
       var newNode = config.render(this.vNode, config);
@@ -130,7 +130,7 @@ export module VPatch {
   }
   
   export class ORDER extends VPatch {
-    constructor( public moves: Moves ) { super(); }
+    constructor( vTree: VTree, public moves: Moves ) { super(vTree); }
     apply(node: Node, config: PatchConfig): Node {
       reorderChildren(node, this.moves);
       return node;
@@ -138,7 +138,7 @@ export module VPatch {
   }
   
   export class PROPS extends VPatch {
-    constructor( public props: Props ) { super(); }
+    constructor( vTree: VTree, public props: Props ) { super(vTree); }
     apply(node: Node, config: PatchConfig): Node {
       var theVTree = this.vTree;
       if (theVTree instanceof VNode) {
@@ -151,7 +151,7 @@ export module VPatch {
   }
   
   export class THUNK extends VPatch {
-    constructor( public thunkPatchset: VPatchSet ) { super(); }
+    constructor( vTree: VTree, public thunkPatchset: VPatchSet ) { super(vTree); }
     apply(node: Node, config: PatchConfig): Node {
     	var newNode = config.patch(node, this.thunkPatchset, config)
       return replaceRoot(node, newNode);
@@ -249,15 +249,15 @@ export module Patch {
    * The default patch algorithm.
    */
   function patchRecursive(rootNode: Node, patches: VPatchSet, config: PatchConfig): Node {
-      var indices = patchIndices(patches);
-      var index = MapNodes.mapNodes(rootNode, patches.node0, indices);
+    var indices = patchIndices(patches);
+    var index = MapNodes.mapNodes(rootNode, patches.node0, indices);
+        
+    // This executes a fold over the indices, patching repeatedly.
+    iterArray(indices.length, indices, (ix) => {
+      rootNode = applyPatch(rootNode, index[ix], patches.patches[ix], config);
+    });
           
-      // This executes a fold over the indices, patching repeatedly.
-      iterArray(indices.length, indices, (ix) => {
-        rootNode = applyPatch(rootNode, index[ix], patches.patches[ix], config);
-      });
-            
-      return rootNode;
+    return rootNode;
   }
   
   function applyPatch(rootNode: Node, domNode: Node, patchList: Array<VPatch>, config: PatchConfig) {
@@ -408,7 +408,7 @@ module MapNodes {
   
   export function mapNodes
     ( rootNode: Node
-    , tree: VNode
+    , tree: VTree
     /** Which nodes are we interested in? */
     , indices: Array<number>
     ): NodeMap
@@ -423,24 +423,26 @@ module MapNodes {
   
   function recurse
     ( rootNode: Node
-    , tree: VNode
+    , tree: VTree
     , indices: Array<number>
     , nodes: NodeMap
     , rootIndex: number
     ): NodeMap {
       
-      if (indexInRange(indices, rootIndex, rootIndex)) {
-        nodes[rootIndex] = rootNode
+      if (tree instanceof VNode) {
+        if (indexInRange(indices, rootIndex, rootIndex)) {
+          nodes[rootIndex] = rootNode
+        }
+  
+        iterArray(tree.children.length, tree.children, (vChild, index) => {
+          rootIndex += 1;
+          if (    vChild instanceof VNode 
+               && indexInRange(indices, rootIndex, rootIndex + vChild.count) ) {
+            recurse(rootNode.childNodes[index], vChild, indices, nodes, rootIndex);
+          } NodeList
+        })
       }
-
-      iterArray(tree.children.length, tree.children, (vChild, index) => {
-        rootIndex += 1;
-        if (    vChild instanceof VNode 
-             && indexInRange(indices, rootIndex, rootIndex + vChild.count) ) {
-          recurse(rootNode.childNodes[index], vChild, indices, nodes, rootIndex);
-        } NodeList
-      })
-
+      
       return nodes;
   }
   
