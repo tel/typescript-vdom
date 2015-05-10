@@ -81,8 +81,17 @@ export module VPatch {
       var priorVTree = this.vTree;
       var newNode: Node;
       
+      // TODO: Make it more clear the cases here.
+      //
+      // (1): The new widget "matches" the old widget and therefore
+      //      is allowed to "update" it.
+      // (2): Otherwise we just do a standard replace.
+      
       if (priorVTree instanceof Widget) {
         var priorWidget = priorVTree;
+        
+        // Essentially we guess here as to whether or not we should
+        // consider the old widget as the same "kind" as this one. 
         var updating = Widget.shouldUpdate(priorWidget, this.widget)
         
         if (updating) {

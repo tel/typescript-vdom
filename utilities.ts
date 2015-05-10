@@ -24,3 +24,7 @@ export function iterArray<A>(n: number, ary: Array<A>, fn: (a: A, i: number) => 
   var i: number;
   for (i = 0; i < n; i++) { fn(ary[i], i); };
 }
+
+export interface Dict<V> {
+  [key: string]: V
+}

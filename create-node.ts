@@ -1,4 +1,4 @@
-import { VTree, VText, VNode, ForcedVTree, Widget, handleThunk } from 'vtree';
+import { VTree, VText, VNode, ForcedVTree, Widget, Thunk } from 'vtree';
 import { applyProperties } from 'apply-properties';
 import { iterArray } from 'utilities';
 
@@ -17,7 +17,7 @@ function completeOptions(opts: CreateOptions): CreateOptions {
 export function createNode(vtree: VTree, opts: CreateOptions): Node {
   var { document, warn } = completeOptions(opts);
 
-  var vtree_: ForcedVTree = handleThunk(vnode, null).a
+  var vtree_: ForcedVTree = Thunk.handle(vnode, null).a
 
   if (vtree_ instanceof Widget) {
       return vtree_.init()

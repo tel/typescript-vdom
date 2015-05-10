@@ -16,14 +16,18 @@
  * it'll probably cause some trouble.)
  */
 
-import { iterSlots, iterArray } from 'utilities';
+import { iterSlots, iterArray, Dict } from 'utilities';
 
-export type VTree = VNode | VText | Widget | Thunk;
+// export type VTree = VNode | VText | Widget | Thunk;
 
 var noProperties: Props = {};
 var noChildren: Array<VTree> = [];
 
-export class VNode {
+export class VTree {
+  constructor(public key: string = null) {};
+}
+
+export class VNode extends VTree {
   constructor(tagName: string);
   constructor(tagName: string, properties: Props);
   constructor(tagName: string, properties: Props, children: Array<VTree>);
@@ -33,8 +37,9 @@ export class VNode {
     , public properties: Props = noProperties
     , public children: Array<VTree> = noChildren
     /** A unique key used to identify this VNode during diffing. */
-    , public key?: string    
+    , key?: string    
     ) {      
+      super(key);
       this.count           = this.children.length;
       this.descendants     = 0;
       this.hasWidgets      = false;
@@ -92,37 +97,49 @@ export class VNode {
 }
 
 /** A wrapper around a text value. Used almost entirely for typed case dispatch. */
-export class VText {
+export class VText extends VTree {
   constructor();
-  constructor(public text: string = "") {}
+  constructor(text: string);
+  constructor(text: string, key: string);
+  constructor(public text: string = "", key?: string) { super(key); }
 }
-
-function noop1(x: any): any {}
-function noop2(x: any, y: any): any {}
 
 /**
  * Widgets form "holes" in the VTree where the diffing algorithm cannot go. One
  * widget will try to "update" a prior one when they share ids or init functions.
  */
-export class Widget {
+export class Widget extends VTree {
   constructor
-    ( public init: () => Node
-    , public update: (previousWidget: Widget, previousDomNode: Node) => any = noop2
-    , public destroy: (domNode: Node) => any = noop1
-    ) {}
+    ( 
+      /** The function called when the widget is being created. */
+      public init: () => Node,
+      
+      /** 
+       * When this Widget is diffed against another widget in the tree update is
+       * called to provide a chance for the widget to update itself.
+       */
+      public update: (previousWidget: Widget, previousDomNode: Node) => Node,
+      
+      /** 
+       * When the Widget is being removed by a fresh diff it's given an opportunity
+       * to clean up anything the Widget was managing. The Node does not need to be
+       * destroyed and can be thought of as having already been removed from the Tree.
+       */
+      public destroy: (domNode: Node) => any,
+      
+      key?: string
+    ) { 
+      super(key); 
+    }
 }
 
 export module Widget {
-  // TODO: Figure this one out
   export function shouldUpdate(a: Widget, b: Widget) {
-    if ("name" in a && "name" in b) {
-      return a.id === b.id
-    } else {
-      return a.init === b.init
-    }  
+    (a.key == b.key) || (a.init == b.init)
   }
 }
 
+/** Subset of VTree types which are known to not be a Thunk. */
 export type ForcedVTree = VNode | VText | Widget;
 
 /** 
@@ -137,13 +154,14 @@ export type ForcedVTree = VNode | VText | Widget;
  * Thunks should be pure in that the only state the manage is that used to enable
  * render optimization.
  */
-export class Thunk {
+export class Thunk extends VTree {
   /** 
    * The render function should construct the thunked VTree eliminating all remaining
    * laziness (e.g., it cannot return another Thunk). The rendering is done with access
    * to the prior VTree node that is being replaced which may also be null.
    */
-  constructor(render: (prior: VTree) => ForcedVTree) {
+  constructor(render: (prior: VTree) => ForcedVTree, key?: string) {
+    super(key);
     this.coreRender = render;
     this.hasRendered = false;
     this.cache = null;
@@ -169,31 +187,33 @@ export class Thunk {
   cache: ForcedVTree;
 }
 
-/**
- * Given two VTrees, a and b, with b set to replace a, force a and b as efficiently
- * as possible.
- */
-export function handleThunk(a: VTree, b: VTree): {a: ForcedVTree, b: ForcedVTree} {
-  var renderedA: ForcedVTree;
-  var renderedB: ForcedVTree;
-
-  if ( b instanceof Thunk &&
-       a instanceof Thunk ) {
-    renderedB = b.render(a);
-    renderedA = a.render(null);
-  } else if ( b instanceof Thunk ) {
-    renderedA = <ForcedVTree> a;
-    renderedB = b.render(a);
-  } else if ( a instanceof Thunk ) {
-    renderedB = <ForcedVTree> b;
-    renderedA = a.render(null);
-  } else {
-    renderedA = <ForcedVTree> a;
-    renderedB = <ForcedVTree> b;
-  }
+export module Thunk {
+  /**
+   * Given two VTrees, a and b, with b set to replace a, force a and b as efficiently
+   * as possible.
+   */
+  export function handle(a: VTree, b: VTree): {a: ForcedVTree, b: ForcedVTree} {
+    var renderedA: ForcedVTree;
+    var renderedB: ForcedVTree;
   
-  return { a: renderedA, b: renderedB };
-  
+    if ( b instanceof Thunk &&
+         a instanceof Thunk ) {
+      renderedB = b.render(a);
+      renderedA = a.render(null);
+    } else if ( b instanceof Thunk ) {
+      renderedA = <ForcedVTree> a;
+      renderedB = b.render(a);
+    } else if ( a instanceof Thunk ) {
+      renderedB = <ForcedVTree> b;
+      renderedA = a.render(null);
+    } else {
+      renderedA = <ForcedVTree> a;
+      renderedB = <ForcedVTree> b;
+    }
+    
+    return { a: renderedA, b: renderedB };
+    
+  } 
 }
 
 // NOTE: Subclassing like below is a pretty ugly way to achieve this. It might
@@ -210,6 +230,7 @@ export class GenericThunk<S> extends Thunk {
        */
       equal: (previousState: S | any, currentState: S) => boolean
     , state: S
+    , key?: string
     ) {
       this.equal = equal;
       this.state = state;      
@@ -235,7 +256,7 @@ export class GenericThunk<S> extends Thunk {
         }
       };
 
-      super(coreRender);
+      super(coreRender, key);
   };
   
   /** 
@@ -246,24 +267,16 @@ export class GenericThunk<S> extends Thunk {
   state: S;
 }
 
-export class VHook {
-  constructor
-    ( hook: (node: Node, propertyName: string, previousValue: any) => any );
-  constructor
-    ( hook: (node: Node, propertyName: string, previousValue: any) => any
-    , unhook: (node: Node, propertyName: string, nextValue: any) => any 
-    );
+export class VHook extends VTree {
   constructor
     ( public hook:    (node: Node, propertyName: string, previousValue: any) => any
-    , public unhook?: (node: Node, propertyName: string, nextValue: any) => any 
+    , public unhook?: (node: Node, propertyName: string, nextValue: any) => any
+    , key?: string 
     ) {
-      this.mustUnhook = !(unhook === undefined);
+      super(key);
+      this.mustUnhook = !unhook;
     }
   mustUnhook: boolean;
-}
-
-export interface Dict<V> {
-  [key: string]: V
 }
 
 export type PropValue = string | number | VHook | Dict<string>
