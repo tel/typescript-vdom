@@ -241,7 +241,7 @@ export module Patch {
    */
   function patchRecursive(rootNode: Node, patches: VPatchSet, config: PatchConfig): Node {
       var indices = patchIndices(patches);
-      var index = DomIndex.domIndex(rootNode, patches.node0, indices);
+      var index = MapNodes.mapNodes(rootNode, patches.node0, indices);
           
       // This executes a fold over the indices, patching repeatedly.
       iterArray(indices.length, indices, (ix) => {
@@ -388,29 +388,27 @@ module ApplyProperties {
 }
 
 /**
- * Maps a virtual DOM tree onto a real DOM tree in an efficient manner.
+ * Construct a node map lifting nodes of interest from the DOM.
  * 
- * We don't want to read all of the DOM nodes in the tree so we use
- * the in-order tree indexing to eliminate recursion down certain branches.
- * We only recurse into a DOM node if we know that it contains a child of
- * interest.
+ * DOM nodes are assigned indices by an in-order tree traversal. A naive
+ * version of this function would provide a dense mapping from indices to
+ * DOM nodes, but instead this algorithm efficiently traverses the DOM to
+ * find only the "indices of interest" as named by a function parameter.
  */ 
-module DomIndex {
-// TODO: Work through this module.  
-  var noChild = {}
+module MapNodes {
   
-  export function domIndex
+  export function mapNodes
     ( rootNode: Node
     , tree: VNode
+    /** Which nodes are we interested in? */
     , indices: Array<number>
-    , nodes?: NodeMap
     ): NodeMap
   {
-    if (!indices || indices.length === 0) {
-      return {}
+    indices.sort(ascendingOrder);
+    if (indices.length > 0) {
+      return recurse(rootNode, tree, indices, {}, 0);
     } else {
-      indices.sort(ascendingOrder)
-      return recurse(rootNode, tree, indices, nodes || {}, 0)
+      return {};
     }
   }
   
@@ -421,34 +419,20 @@ module DomIndex {
     , nodes: NodeMap
     , rootIndex: number
     ): NodeMap {
-      if (rootNode) {
-          if (indexInRange(indices, rootIndex, rootIndex)) {
-              nodes[rootIndex] = rootNode
-          }
-  
-          var vChildren = tree.children
-  
-          if (vChildren) {
-  
-              var childNodes = rootNode.childNodes
-  
-              for (var i = 0; i < tree.children.length; i++) {
-                  rootIndex += 1
-  
-                  var vChild = vChildren[i] || noChild
-                  var nextIndex = rootIndex + (vChild.count || 0)
-  
-                  // skip recursion down the tree if there are no nodes down here
-                  if (indexInRange(indices, rootIndex, nextIndex)) {
-                      recurse(childNodes[i], vChild, indices, nodes, rootIndex)
-                  }
-  
-                  rootIndex = nextIndex
-              }
-          }
+      
+      if (indexInRange(indices, rootIndex, rootIndex)) {
+        nodes[rootIndex] = rootNode
       }
-  
-      return nodes
+
+      iterArray(tree.children.length, tree.children, (vChild, index) => {
+        rootIndex += 1;
+        if (    vChild instanceof VNode 
+             && indexInRange(indices, rootIndex, rootIndex + vChild.count) ) {
+          recurse(rootNode.childNodes[index], vChild, indices, nodes, rootIndex);
+        } NodeList
+      })
+
+      return nodes;
   }
   
   /** 
