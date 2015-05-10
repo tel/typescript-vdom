@@ -197,7 +197,7 @@ export function handleThunk(a: VTree, b: VTree): {a: ForcedVTree, b: ForcedVTree
 
 export class GenericThunk<S> extends Thunk {
   constructor
-    ( render: (state: S) => ThunkResult
+    ( render: (state: S) => ForcedVTree
     , /** 
        * The previous state is likely to be S itself, but compare should 
        * gracefully handle cases where this is not true as well. When the
@@ -208,7 +208,7 @@ export class GenericThunk<S> extends Thunk {
     ) {
       this.equal = equal;
       this.state = state;      
-      var coreRender: (prior: VTree) => ThunkResult = (prior) => {
+      var coreRender: (prior: VTree) => ForcedVTree = (prior) => {
         // If we're being diffed against another GenericThunk, then
         // we'll see if there's been a change in state
         if (prior instanceof GenericThunk) {
@@ -264,7 +264,7 @@ export interface Dict<V> {
 export type PropValue = string | number | VHook | Dict<string>
 
 export interface Props {
-  attributes: Dict<string>;
-  style: Dict<string>;
+  attributes?: Dict<string>;
+  style?: Dict<string>;
   [key: string]: PropValue;
 }
